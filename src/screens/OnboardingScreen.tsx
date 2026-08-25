@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFinancial } from '../context/FinancialContext';
+import { useAuth } from '../context/AuthContext';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Defs, ClipPath, Rect } from 'react-native-svg';
 
@@ -113,17 +114,18 @@ const TopographicHeader: React.FC<{ heightVal: number }> = ({ heightVal }) => {
   );
 };
 
-export const OnboardingScreen: React.FC = () => {
+interface OnboardingScreenProps {
+  initialStep?: number;
+}
+
+export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ initialStep }) => {
   const { completeSetup } = useFinancial();
+  const { loginWithGoogle, loginWithEmail, user, isAuthenticated } = useAuth();
   
-  // Steps:
-  // 1: Welcome
-  // 2: Register (Đăng ký / Sign up)
-  // 3: Login (Đăng nhập / Sign in)
-  // 4: Profile Name & Monthly Income Goal
-  // 5: Initial Assets (Cash & Bank)
-  // 6: Custom Financial Jars Creation
-  const [step, setStep] = useState<number>(1);
+  const [step, setStep] = useState<number>(() => {
+    if (initialStep) return initialStep;
+    return isAuthenticated || user ? 4 : 1;
+  });
   
   // Animation values for transition
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -151,7 +153,7 @@ export const OnboardingScreen: React.FC = () => {
   const [rememberMe, setRememberMe] = useState<boolean>(false);
 
   // Setup State
-  const [name, setName] = useState<string>('');
+  const [name, setName] = useState<string>(() => user?.full_name || '');
   const [incomeGoal, setIncomeGoal] = useState<string>('30000000');
   const [cash, setCash] = useState<string>('35000000');
   const [bank, setBank] = useState<string>('100000000');
@@ -219,7 +221,7 @@ export const OnboardingScreen: React.FC = () => {
     );
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!loginEmail.trim() || !loginPassword.trim()) {
       Alert.alert('Thông báo', 'Vui lòng nhập email và mật khẩu.');
       return;
@@ -232,8 +234,23 @@ export const OnboardingScreen: React.FC = () => {
 
     if (isCorrectCreds) {
       setStep(4);
+      return;
+    }
+
+    const res = await loginWithEmail(loginEmail, loginPassword);
+    if (res.success) {
+      setStep(4);
     } else {
-      Alert.alert('Lỗi đăng nhập', 'Email hoặc mật khẩu không chính xác.');
+      Alert.alert('Lỗi đăng nhập', res.message || 'Email hoặc mật khẩu không chính xác.');
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    const res = await loginWithGoogle();
+    if (res.success) {
+      setStep(4);
+    } else {
+      Alert.alert('Google Sign-In', res.message);
     }
   };
 
@@ -515,6 +532,12 @@ export const OnboardingScreen: React.FC = () => {
                     <Text style={styles.mockupButtonText}>Create Account</Text>
                   </TouchableOpacity>
 
+                  {/* Google Sign Up Button */}
+                  <TouchableOpacity style={styles.googleMockupButton} onPress={handleGoogleLogin}>
+                    <Ionicons name="logo-google" size={18} color="#ea4335" style={{ marginRight: 8 }} />
+                    <Text style={styles.googleMockupButtonText}>Sign up with Google</Text>
+                  </TouchableOpacity>
+
                   <TouchableOpacity style={styles.switchScreenBtn} onPress={() => setStep(3)}>
                     <Text style={styles.switchScreenText}>Already have an Account! <Text style={styles.switchScreenHighlight}>Login</Text></Text>
                   </TouchableOpacity>
@@ -588,6 +611,12 @@ export const OnboardingScreen: React.FC = () => {
                 <View style={styles.authBottomGroup}>
                   <TouchableOpacity style={styles.mockupButton} onPress={handleLogin}>
                     <Text style={styles.mockupButtonText}>Login</Text>
+                  </TouchableOpacity>
+
+                  {/* Google Sign In Button */}
+                  <TouchableOpacity style={styles.googleMockupButton} onPress={handleGoogleLogin}>
+                    <Ionicons name="logo-google" size={18} color="#ea4335" style={{ marginRight: 8 }} />
+                    <Text style={styles.googleMockupButtonText}>Sign in with Google</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.switchScreenBtn} onPress={() => setStep(2)}>
@@ -1507,5 +1536,26 @@ const styles = StyleSheet.create({
   },
   eyeBtn: {
     padding: 4,
+  },
+  googleMockupButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    height: 48,
+    borderRadius: 24,
+    marginTop: 10,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+  },
+  googleMockupButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0F172A',
   },
 });
