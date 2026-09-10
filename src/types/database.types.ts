@@ -3,7 +3,8 @@ export type UserRole = 'admin' | 'user';
 export interface UserProfile {
   id: string;
   email: string;
-  full_name: string | null;
+  full_name?: string | null;
+  username?: string | null;
   avatar_url: string | null;
   role: UserRole;
   created_at?: string;

@@ -12,10 +12,11 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   loginWithEmail: (email: string, password: string) => Promise<{ success: boolean; message: string }>;
-  registerWithEmail: (email: string, password: string, fullName: string) => Promise<{ success: boolean; message: string; requiresOtp?: boolean }>;
+  registerWithEmail: (email: string, password: string, username: string) => Promise<{ success: boolean; message: string; requiresOtp?: boolean }>;
   sendOtp: (email: string) => Promise<{ success: boolean; message: string }>;
   verifyOtp: (email: string, code: string) => Promise<{ success: boolean; message: string }>;
-  loginWithGoogle: () => Promise<{ success: boolean; message: string }>;
+  resetPassword: (email: string, code: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
+  loginWithGoogle: () => Promise<{ success: boolean; message: string; requiresOtp?: boolean; email?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -67,8 +68,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Đăng ký Email
-  const registerWithEmail = async (email: string, password: string, fullName: string) => {
-    return await authService.signUpWithEmail(email, password, fullName);
+  const registerWithEmail = async (email: string, password: string, username: string) => {
+    return await authService.signUpWithEmail(email, password, username);
   };
 
   // Gửi OTP
@@ -88,6 +89,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { success: result.success, message: result.message };
   };
 
+  // Đặt lại mật khẩu
+  const resetPassword = async (email: string, code: string, newPassword: string) => {
+    setIsLoading(true);
+    const result = await authService.resetPassword(email, code, newPassword);
+    setIsLoading(false);
+    return result;
+  };
+
   // Đăng nhập Google
   const loginWithGoogle = async () => {
     setIsLoading(true);
@@ -95,6 +104,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(false);
 
     if (result.success && result.user) {
+      if (result.requiresOtp) {
+        return { success: true, message: result.message, requiresOtp: true, email: result.email };
+      }
       await saveUserSession(result.user);
     }
     return { success: result.success, message: result.message };
@@ -130,6 +142,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         registerWithEmail,
         sendOtp,
         verifyOtp,
+        resetPassword,
         loginWithGoogle,
         logout,
       }}

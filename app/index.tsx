@@ -123,7 +123,7 @@ function AppGuard() {
     );
   }
 
-  // Khi CHƯA ĐĂNG NHẬP hoặc ĐÃ BẤM ĐĂNG XUẤT -> Đẩy thẳng về màn hình Đăng Nhập (Login Step 3)
+  // Khi CHƯA ĐĂNG NHẬP hoặc ĐÃ BẤM ĐĂNG XUẤT -> Đẩy về OnboardingScreen bước 3 (Sign in)
   if (!isAuthenticated) {
     return (
       <View style={[styles.container, { backgroundColor: '#ffffff' }]}>

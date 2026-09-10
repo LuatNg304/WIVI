@@ -14,13 +14,13 @@ import {
   StatusBar,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import { Ionicons } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Defs, ClipPath, Rect } from 'react-native-svg';
 
 const { width, height } = Dimensions.get('window');
-const bannerHeight = height * 0.32;
+const bannerHeight = height * 0.20;
 
-// Topographic Wave Header SVG component matching WIVI Design System
+// Topographic Wave Header SVG Component
 const TopographicHeader: React.FC<{ heightVal: number }> = ({ heightVal }) => {
   return (
     <View style={[styles.svgHeaderContainer, { height: heightVal }]}>
@@ -36,7 +36,7 @@ const TopographicHeader: React.FC<{ heightVal: number }> = ({ heightVal }) => {
         {/* Base Blue Background */}
         <Rect x="-10" y="0" width={width + 20} height={heightVal} fill="#3A55B4" clipPath="url(#loginWaveClip)" />
 
-        {/* Topographic Lines inside the clipped area */}
+        {/* Topographic Lines inside clipped area */}
         <Path
           d={`M-50,${heightVal * 0.25} C${width * 0.2},${heightVal * 0.05} ${width * 0.4},${heightVal * 0.45} ${width * 0.7},${heightVal * 0.2} C${width * 0.9},${heightVal * 0.05} ${width * 1.1},${heightVal * 0.3} ${width * 1.3},${heightVal * 0.2}`}
           fill="none"
@@ -70,29 +70,34 @@ const TopographicHeader: React.FC<{ heightVal: number }> = ({ heightVal }) => {
   );
 };
 
-interface LoginScreenProps {
-  onNavigateToRegister: () => void;
-  onNavigateToOtp: (email: string) => void;
+export interface LoginScreenProps {
+  onNavigateToRegister?: () => void;
+  onNavigateToForgotPassword?: () => void;
+  onNavigateToOtp?: (email: string) => void;
+  onLoginSuccess?: () => void;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({
   onNavigateToRegister,
+  onNavigateToForgotPassword,
   onNavigateToOtp,
+  onLoginSuccess,
 }) => {
-  const { loginWithEmail, loginWithGoogle, sendOtp, isLoading } = useAuth();
-  
+  const { loginWithEmail, loginWithGoogle, isLoading } = useAuth();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [loginMode, setLoginMode] = useState<'password' | 'otp'>('password');
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
-  const handlePasswordLogin = async () => {
+  const handleLogin = async () => {
     if (!email.trim()) {
-      Alert.alert('Thông báo', 'Vui lòng nhập địa chỉ Email của bạn.');
+      Alert.alert('Thông báo', 'Vui lòng nhập địa chỉ Email.');
       return;
     }
-    if (!password) {
+    if (!password.trim()) {
       Alert.alert('Thông báo', 'Vui lòng nhập mật khẩu.');
       return;
     }
@@ -101,25 +106,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     const res = await loginWithEmail(email, password);
     setIsSubmitting(false);
 
-    if (!res.success) {
-      Alert.alert('Đăng nhập thất bại', res.message);
-    }
-  };
-
-  const handleSendOtpLogin = async () => {
-    if (!email.trim()) {
-      Alert.alert('Thông báo', 'Vui lòng nhập địa chỉ Email để nhận mã OTP.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    const res = await sendOtp(email);
-    setIsSubmitting(false);
-
     if (res.success) {
-      onNavigateToOtp(email);
+      if (onLoginSuccess) onLoginSuccess();
     } else {
-      Alert.alert('Thông báo', res.message);
+      Alert.alert('Lỗi đăng nhập', res.message || 'Email hoặc mật khẩu không chính xác.');
     }
   };
 
@@ -128,33 +118,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     const res = await loginWithGoogle();
     setIsSubmitting(false);
 
-    if (!res.success) {
+    if (res.success) {
+      if (res.requiresOtp && res.email) {
+        if (onNavigateToOtp) onNavigateToOtp(res.email);
+      } else if (onLoginSuccess) {
+        onLoginSuccess();
+      }
+    } else {
       Alert.alert('Google Sign-In', res.message);
     }
-  };
-
-  // Nút hỗ trợ đăng nhập Admin nhanh cho mục đích kiểm thử
-  const fillAdminAccount = () => {
-    setEmail('admin@wivi.com');
-    setPassword('admin123');
-    setLoginMode('password');
   };
 
   return (
     <View style={styles.rootContainer}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-      
-      {/* Topographic Wave Header */}
-      <TopographicHeader heightVal={bannerHeight} />
 
-      {/* Header Brand Content */}
-      <View style={styles.headerContentArea}>
-        <View style={styles.logoBadge}>
-          <Ionicons name="wallet-sharp" size={32} color="#ffffff" />
-        </View>
-        <Text style={styles.brandTitle}>WIVI</Text>
-        <Text style={styles.brandSubtitle}>Tự do tài chính & Quản lý thông minh</Text>
-      </View>
+      {/* Topographic Wave Header Banner */}
+      <TopographicHeader heightVal={bannerHeight} />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -165,129 +145,98 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Form Card */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Chào mừng trở lại</Text>
-
-            {/* Mode Switcher */}
-            <View style={styles.tabContainer}>
-              <TouchableOpacity
-                style={[styles.tabButton, loginMode === 'password' && styles.tabButtonActive]}
-                onPress={() => setLoginMode('password')}
-              >
-                <Text style={[styles.tabText, loginMode === 'password' && styles.tabTextActive]}>
-                  Mật khẩu
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.tabButton, loginMode === 'otp' && styles.tabButtonActive]}
-                onPress={() => setLoginMode('otp')}
-              >
-                <Text style={[styles.tabText, loginMode === 'otp' && styles.tabTextActive]}>
-                  Mã Email OTP
-                </Text>
-              </TouchableOpacity>
+          <View style={styles.cardBlock}>
+            <View style={styles.titleContainer}>
+              <Text style={styles.authTitle}>Sign in</Text>
+              <View style={styles.titleUnderline} />
             </View>
 
             {/* Email Input */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Địa chỉ Email</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="mail-outline" size={20} color="#7a7a7a" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="vd: user@domain.com"
-                  placeholderTextColor="#a0a0a0"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  value={email}
-                  onChangeText={setEmail}
-                />
-              </View>
+            <Text style={styles.mockupLabel}>Email</Text>
+            <View style={[styles.mockupInputRow, focusedField === 'email' && styles.mockupInputRowActive]}>
+              <Feather name="mail" size={16} color="#64748B" style={styles.mockupIcon} />
+              <View style={styles.mockupDivider} />
+              <TextInput
+                style={styles.mockupTextInput}
+                placeholder="demo@email.com"
+                placeholderTextColor="#CBD5E1"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={email}
+                onChangeText={setEmail}
+                onFocus={() => setFocusedField('email')}
+                onBlur={() => setFocusedField(null)}
+              />
             </View>
 
-            {/* Password Input (nếu chế độ password) */}
-            {loginMode === 'password' && (
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Mật khẩu</Text>
-                <View style={styles.inputWrapper}>
-                  <Ionicons name="lock-closed-outline" size={20} color="#7a7a7a" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Nhập mật khẩu"
-                    placeholderTextColor="#a0a0a0"
-                    secureTextEntry={!showPassword}
-                    value={password}
-                    onChangeText={setPassword}
-                  />
-                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
-                    <Ionicons
-                      name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                      size={20}
-                      color="#7a7a7a"
-                    />
-                  </TouchableOpacity>
+            {/* Password Input */}
+            <Text style={styles.mockupLabel}>Password</Text>
+            <View style={[styles.mockupInputRow, focusedField === 'password' && styles.mockupInputRowActive]}>
+              <Feather name="lock" size={16} color="#64748B" style={styles.mockupIcon} />
+              <View style={styles.mockupDivider} />
+              <TextInput
+                style={styles.mockupTextInput}
+                placeholder="enter your password"
+                placeholderTextColor="#CBD5E1"
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={setPassword}
+                onFocus={() => setFocusedField('password')}
+                onBlur={() => setFocusedField(null)}
+              />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+                <Feather name={showPassword ? 'eye' : 'eye-off'} size={16} color="#CBD5E1" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Remember Me and Forgot Password */}
+            <View style={styles.authOptRow}>
+              <TouchableOpacity
+                style={styles.checkboxRowMin}
+                activeOpacity={0.8}
+                onPress={() => setRememberMe(!rememberMe)}
+              >
+                <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                  {rememberMe && <Ionicons name="checkmark" size={11} color="#ffffff" />}
                 </View>
-              </View>
-            )}
-
-            {/* Action Button */}
-            {loginMode === 'password' ? (
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={handlePasswordLogin}
-                disabled={isSubmitting || isLoading}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <Text style={styles.primaryButtonText}>Đăng Nhập</Text>
-                )}
+                <Text style={styles.authOptText}>Remember Me</Text>
               </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={styles.primaryButton}
-                onPress={handleSendOtpLogin}
-                disabled={isSubmitting || isLoading}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <Text style={styles.primaryButtonText}>Gửi Mã OTP Qua Email</Text>
-                )}
+              <TouchableOpacity onPress={() => onNavigateToForgotPassword && onNavigateToForgotPassword()}>
+                <Text style={styles.forgotPwdText}>Forgot Password?</Text>
               </TouchableOpacity>
-            )}
-
-            {/* Divider */}
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>Hoặc tiếp tục với</Text>
-              <View style={styles.dividerLine} />
             </View>
+
+            {/* Action Buttons */}
+            <TouchableOpacity
+              style={styles.mockupButton}
+              onPress={handleLogin}
+              disabled={isSubmitting || isLoading}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.mockupButtonText}>Login</Text>
+              )}
+            </TouchableOpacity>
 
             {/* Google Sign In Button */}
             <TouchableOpacity
-              style={styles.googleButton}
+              style={styles.googleMockupButton}
               onPress={handleGoogleLogin}
               disabled={isSubmitting || isLoading}
             >
-              <Ionicons name="logo-google" size={20} color="#ea4335" style={{ marginRight: 10 }} />
-              <Text style={styles.googleButtonText}>Đăng nhập bằng Gmail / Google</Text>
+              <Ionicons name="logo-google" size={18} color="#ea4335" style={{ marginRight: 8 }} />
+              <Text style={styles.googleMockupButtonText}>Sign in with Google</Text>
             </TouchableOpacity>
 
-            {/* Quick Admin Fill Helper */}
-            <TouchableOpacity style={styles.adminQuickBtn} onPress={fillAdminAccount}>
-              <Ionicons name="shield-checkmark" size={16} color="#ff3b30" />
-              <Text style={styles.adminQuickText}>Dùng tài khoản Admin (admin@wivi.com)</Text>
-            </TouchableOpacity>
-
-            {/* Footer Register Link */}
-            <View style={styles.footerRow}>
-              <Text style={styles.footerText}>Chưa có tài khoản?</Text>
-              <TouchableOpacity onPress={onNavigateToRegister}>
-                <Text style={styles.registerLink}>Đăng ký ngay</Text>
+            {/* Switch to Register link */}
+            {onNavigateToRegister && (
+              <TouchableOpacity style={styles.switchScreenBtn} onPress={onNavigateToRegister}>
+                <Text style={styles.switchScreenText}>
+                  {"Don't"} have an Account ? <Text style={styles.switchScreenHighlight}>Sign up</Text>
+                </Text>
               </TouchableOpacity>
-            </View>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -298,7 +247,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 const styles = StyleSheet.create({
   rootContainer: {
     flex: 1,
-    backgroundColor: '#f5f5f7',
+    backgroundColor: '#ffffff',
   },
   svgHeaderContainer: {
     position: 'absolute',
@@ -314,195 +263,179 @@ const styles = StyleSheet.create({
   },
   headerContentArea: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 54 : 40,
+    top: bannerHeight * 0.18,
     left: 0,
     right: 0,
     alignItems: 'center',
     zIndex: 2,
   },
   logoBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   brandTitle: {
     fontSize: 26,
     fontWeight: '800',
     color: '#ffffff',
-    letterSpacing: -0.5,
+    letterSpacing: 1.5,
   },
   brandSubtitle: {
     fontSize: 13,
     color: 'rgba(255, 255, 255, 0.85)',
     marginTop: 2,
-    fontWeight: '500',
+    fontWeight: '400',
   },
   scrollContainer: {
     flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingTop: bannerHeight - 20,
+    paddingTop: bannerHeight * 0.95,
+    paddingHorizontal: 24,
     paddingBottom: 40,
-    zIndex: 3,
   },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 4,
+  cardBlock: {
+    paddingHorizontal: 4,
   },
-  cardTitle: {
+  titleContainer: {
+    alignSelf: 'flex-start',
+    marginBottom: 20,
+  },
+  authTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#1d1d1f',
-    marginBottom: 18,
-    textAlign: 'center',
+    color: '#0F172A',
   },
-  tabContainer: {
+  titleUnderline: {
+    height: 3,
+    width: 24,
+    backgroundColor: '#0066cc',
+    borderRadius: 2,
+    marginTop: 4,
+  },
+  mockupLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569',
+    marginBottom: 6,
+    marginTop: 10,
+  },
+  mockupInputRow: {
     flexDirection: 'row',
-    backgroundColor: '#f0f0f2',
-    borderRadius: 12,
+    alignItems: 'center',
+    height: 48,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 14,
+  },
+  mockupInputRowActive: {
+    borderColor: '#0066cc',
+    backgroundColor: '#ffffff',
+  },
+  mockupIcon: {
+    marginRight: 8,
+  },
+  mockupDivider: {
+    width: 1,
+    height: 18,
+    backgroundColor: '#CBD5E1',
+    marginRight: 10,
+  },
+  mockupTextInput: {
+    flex: 1,
+    height: '100%',
+    fontSize: 14,
+    color: '#0F172A',
+  },
+  eyeBtn: {
     padding: 4,
+  },
+  authOptRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 14,
     marginBottom: 18,
   },
-  tabButton: {
-    flex: 1,
-    paddingVertical: 10,
+  checkboxRowMin: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 10,
   },
-  tabButtonActive: {
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
     backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#7a7a7a',
+  checkboxChecked: {
+    backgroundColor: '#0066cc',
+    borderColor: '#0066cc',
   },
-  tabTextActive: {
+  authOptText: {
+    fontSize: 13,
+    color: '#64748B',
+  },
+  forgotPwdText: {
+    fontSize: 13,
     color: '#0066cc',
     fontWeight: '600',
   },
-  inputGroup: {
-    marginBottom: 14,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#333333',
-    marginBottom: 6,
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fafafc',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    borderRadius: 14,
-    paddingHorizontal: 14,
+  mockupButton: {
     height: 50,
-  },
-  inputIcon: {
-    marginRight: 10,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    color: '#1d1d1f',
-  },
-  eyeIcon: {
-    padding: 6,
-  },
-  primaryButton: {
     backgroundColor: '#0066cc',
-    height: 52,
     borderRadius: 14,
-    alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
+    alignItems: 'center',
+    marginTop: 4,
     shadowColor: '#0066cc',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 4,
   },
-  primaryButtonText: {
+  mockupButtonText: {
     color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 18,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#e5e5ea',
-  },
-  dividerText: {
-    fontSize: 12,
-    color: '#8e8e93',
-    paddingHorizontal: 12,
-  },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#d1d1d6',
-    height: 50,
-    borderRadius: 14,
-  },
-  googleButtonText: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#1d1d1f',
+    fontWeight: '700',
   },
-  adminQuickBtn: {
+  googleMockupButton: {
     flexDirection: 'row',
+    height: 48,
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff2f2',
-    paddingVertical: 10,
-    borderRadius: 10,
-    marginTop: 14,
-    gap: 6,
+    marginTop: 12,
   },
-  adminQuickText: {
-    fontSize: 13,
+  googleMockupButtonText: {
+    color: '#334155',
+    fontSize: 14,
     fontWeight: '600',
-    color: '#ff3b30',
   },
-  footerRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+  switchScreenBtn: {
+    alignItems: 'center',
     marginTop: 20,
-    gap: 6,
+    paddingVertical: 4,
   },
-  footerText: {
-    fontSize: 14,
-    color: '#7a7a7a',
+  switchScreenText: {
+    fontSize: 13,
+    color: '#64748B',
   },
-  registerLink: {
-    fontSize: 14,
-    fontWeight: '600',
+  switchScreenHighlight: {
     color: '#0066cc',
+    fontWeight: '700',
   },
 });
