@@ -15,8 +15,13 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFinancial } from '../context/FinancialContext';
+import { useAuth } from '../context/AuthContext';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Defs, ClipPath, Rect } from 'react-native-svg';
+import { LoginScreen } from './LoginScreen';
+import { RegisterScreen } from './RegisterScreen';
+import { OtpVerificationScreen } from './OtpVerificationScreen';
+import { ForgotPasswordScreen } from './ForgotPasswordScreen';
 
 const { width, height } = Dimensions.get('window');
 const bannerHeight = height * 0.38;
@@ -113,45 +118,25 @@ const TopographicHeader: React.FC<{ heightVal: number }> = ({ heightVal }) => {
   );
 };
 
-export const OnboardingScreen: React.FC = () => {
+interface OnboardingScreenProps {
+  initialStep?: number;
+}
+
+export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ initialStep }) => {
   const { completeSetup } = useFinancial();
+  const { user, isAuthenticated } = useAuth();
   
-  // Steps:
-  // 1: Welcome
-  // 2: Register (Đăng ký / Sign up)
-  // 3: Login (Đăng nhập / Sign in)
-  // 4: Profile Name & Monthly Income Goal
-  // 5: Initial Assets (Cash & Bank)
-  // 6: Custom Financial Jars Creation
-  const [step, setStep] = useState<number>(1);
+  const [step, setStep] = useState<number>(() => {
+    if (initialStep) return initialStep;
+    return isAuthenticated || user ? 4 : 1;
+  });
   
   // Animation values for transition
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
 
-  // Registration State
-  const [regEmail, setRegEmail] = useState<string>('');
-  const [regPhone, setRegPhone] = useState<string>('');
-  const [regPassword, setRegPassword] = useState<string>('');
-  const [regConfirmPassword, setRegConfirmPassword] = useState<string>('');
-  const [agreeTerms, setAgreeTerms] = useState<boolean>(false);
-  
-  // Password visibility
-  const [showRegPassword, setShowRegPassword] = useState<boolean>(false);
-  const [showRegConfirmPassword, setShowRegConfirmPassword] = useState<boolean>(false);
-  const [showLoginPassword, setShowLoginPassword] = useState<boolean>(false);
-
-  // Registered Credentials Store (in-memory mock)
-  const [registeredEmail, setRegisteredEmail] = useState<string>('admin@wibi.vn');
-  const [registeredPassword, setRegisteredPassword] = useState<string>('123456');
-
-  // Login State
-  const [loginEmail, setLoginEmail] = useState<string>('');
-  const [loginPassword, setLoginPassword] = useState<string>('');
-  const [rememberMe, setRememberMe] = useState<boolean>(false);
-
   // Setup State
-  const [name, setName] = useState<string>('');
+  const [name, setName] = useState<string>(() => user?.full_name || '');
   const [incomeGoal, setIncomeGoal] = useState<string>('30000000');
   const [cash, setCash] = useState<string>('35000000');
   const [bank, setBank] = useState<string>('100000000');
@@ -190,52 +175,6 @@ export const OnboardingScreen: React.FC = () => {
       })
     ]).start();
   }, [step]);
-
-  const handleRegister = () => {
-    if (!regEmail.trim() || !regPhone.trim() || !regPassword.trim() || !regConfirmPassword.trim()) {
-      Alert.alert('Thông báo', 'Vui lòng điền đầy đủ các thông tin đăng ký.');
-      return;
-    }
-    if (!regEmail.includes('@')) {
-      Alert.alert('Thông báo', 'Email không hợp lệ.');
-      return;
-    }
-    if (regPassword !== regConfirmPassword) {
-      Alert.alert('Thông báo', 'Mật khẩu nhập lại không khớp.');
-      return;
-    }
-    if (!agreeTerms) {
-      Alert.alert('Thông báo', 'Vui lòng đồng ý với Điều khoản và Chính sách bảo mật.');
-      return;
-    }
-
-    setRegisteredEmail(regEmail);
-    setRegisteredPassword(regPassword);
-    
-    Alert.alert(
-      'Đăng ký thành công',
-      'Tài khoản của bạn đã được tạo! Hãy tiến hành đăng nhập.',
-      [{ text: 'Đăng nhập', onPress: () => setStep(3) }]
-    );
-  };
-
-  const handleLogin = () => {
-    if (!loginEmail.trim() || !loginPassword.trim()) {
-      Alert.alert('Thông báo', 'Vui lòng nhập email và mật khẩu.');
-      return;
-    }
-    
-    const isCorrectCreds = 
-      (loginEmail.toLowerCase() === registeredEmail.toLowerCase() && loginPassword === registeredPassword) ||
-      (loginEmail.toLowerCase() === 'admin@wibi.vn' && loginPassword === '123456') ||
-      (loginEmail.toLowerCase() === 'demo' && loginPassword === 'demo');
-
-    if (isCorrectCreds) {
-      setStep(4);
-    } else {
-      Alert.alert('Lỗi đăng nhập', 'Email hoặc mật khẩu không chính xác.');
-    }
-  };
 
   const handleNext = () => {
     if (step === 4) {
@@ -371,6 +310,53 @@ export const OnboardingScreen: React.FC = () => {
     step === 3 ? height * 0.28 : 0;
   const remainingHeight = height - currentBannerHeight - (Platform.OS === 'ios' ? 60 : 40);
 
+  // State cho OTP Email
+  const [otpEmail, setOtpEmail] = useState<string>('');
+
+  if (step === 2) {
+    return (
+      <RegisterScreen
+        onNavigateToLogin={() => setStep(3)}
+        onNavigateToOtp={(email: string) => {
+          setOtpEmail(email);
+          setStep(7);
+        }}
+        onRegisterSuccess={() => setStep(4)}
+      />
+    );
+  }
+
+  if (step === 3) {
+    return (
+      <LoginScreen
+        onNavigateToRegister={() => setStep(2)}
+        onNavigateToForgotPassword={() => setStep(8)}
+        onNavigateToOtp={(email: string) => {
+          setOtpEmail(email);
+          setStep(7);
+        }}
+        onLoginSuccess={() => setStep(4)}
+      />
+    );
+  }
+
+  if (step === 7) {
+    return (
+      <OtpVerificationScreen
+        email={otpEmail}
+        onNavigateBack={() => setStep(2)}
+      />
+    );
+  }
+
+  if (step === 8) {
+    return (
+      <ForgotPasswordScreen
+        onNavigateToLogin={() => setStep(3)}
+      />
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: isAuthStep ? '#ffffff' : '#F8FAFC' }]}>
       <KeyboardAvoidingView
@@ -384,8 +370,8 @@ export const OnboardingScreen: React.FC = () => {
           bounces={false}
         >
           
-          {/* Top Banner Area for Steps 1, 2, 3 only */}
-          {isAuthStep && <TopographicHeader heightVal={currentBannerHeight} />}
+          {/* Top Banner Area for Steps 1 only */}
+          {step === 1 && <TopographicHeader heightVal={currentBannerHeight} />}
 
           {/* Animated Transition Wrapper */}
           <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], flex: 1, width: '100%' }}>
@@ -410,188 +396,6 @@ export const OnboardingScreen: React.FC = () => {
                     <View style={styles.continueCircle}>
                       <Feather name="arrow-right" size={20} color="#ffffff" />
                     </View>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-
-            {/* STEP 2: REGISTRATION SCREEN (Mockup Layout) */}
-            {step === 2 && (
-              <View style={[styles.authContentBlock, { minHeight: remainingHeight }]}>
-                <View style={styles.authTopGroup}>
-                  <View style={styles.titleContainer}>
-                    <Text style={styles.authTitle}>Sign up</Text>
-                    <View style={styles.titleUnderline} />
-                  </View>
-                  
-                  <Text style={styles.mockupLabel}>Email</Text>
-                  <View style={[styles.mockupInputRow, focusedField === 'regEmail' && styles.mockupInputRowActive]}>
-                    <Feather name="mail" size={16} color="#64748B" style={styles.mockupIcon} />
-                    <View style={styles.mockupDivider} />
-                    <TextInput
-                      style={styles.mockupTextInput}
-                      placeholder="demo@email.com"
-                      placeholderTextColor="#CBD5E1"
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      value={regEmail}
-                      onChangeText={setRegEmail}
-                      onFocus={() => setFocusedField('regEmail')}
-                      onBlur={() => setFocusedField(null)}
-                    />
-                  </View>
-
-                  <Text style={styles.mockupLabel}>Phone no</Text>
-                  <View style={[styles.mockupInputRow, focusedField === 'regPhone' && styles.mockupInputRowActive]}>
-                    <Feather name="smartphone" size={16} color="#64748B" style={styles.mockupIcon} />
-                    <View style={styles.mockupDivider} />
-                    <TextInput
-                      style={styles.mockupTextInput}
-                      placeholder="+00 000-0000-000"
-                      placeholderTextColor="#CBD5E1"
-                      keyboardType="phone-pad"
-                      value={regPhone}
-                      onChangeText={setRegPhone}
-                      onFocus={() => setFocusedField('regPhone')}
-                      onBlur={() => setFocusedField(null)}
-                    />
-                  </View>
-
-                  <Text style={styles.mockupLabel}>Password</Text>
-                  <View style={[styles.mockupInputRow, focusedField === 'regPassword' && styles.mockupInputRowActive]}>
-                    <Feather name="lock" size={16} color="#64748B" style={styles.mockupIcon} />
-                    <View style={styles.mockupDivider} />
-                    <TextInput
-                      style={styles.mockupTextInput}
-                      placeholder="enter your password"
-                      placeholderTextColor="#CBD5E1"
-                      secureTextEntry={!showRegPassword}
-                      value={regPassword}
-                      onChangeText={setRegPassword}
-                      onFocus={() => setFocusedField('regPassword')}
-                      onBlur={() => setFocusedField(null)}
-                    />
-                    <TouchableOpacity onPress={() => setShowRegPassword(!showRegPassword)} style={styles.eyeBtn}>
-                      <Feather name={showRegPassword ? "eye" : "eye-off"} size={16} color="#CBD5E1" />
-                    </TouchableOpacity>
-                  </View>
-
-                  <Text style={styles.mockupLabel}>Confirm Password</Text>
-                  <View style={[styles.mockupInputRow, focusedField === 'regConfirmPassword' && styles.mockupInputRowActive]}>
-                    <Feather name="lock" size={16} color="#64748B" style={styles.mockupIcon} />
-                    <View style={styles.mockupDivider} />
-                    <TextInput
-                      style={styles.mockupTextInput}
-                      placeholder="confirm your password"
-                      placeholderTextColor="#CBD5E1"
-                      secureTextEntry={!showRegConfirmPassword}
-                      value={regConfirmPassword}
-                      onChangeText={setRegConfirmPassword}
-                      onFocus={() => setFocusedField('regConfirmPassword')}
-                      onBlur={() => setFocusedField(null)}
-                    />
-                    <TouchableOpacity onPress={() => setShowRegConfirmPassword(!showRegConfirmPassword)} style={styles.eyeBtn}>
-                      <Feather name={showRegConfirmPassword ? "eye" : "eye-off"} size={16} color="#CBD5E1" />
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Terms checkbox */}
-                  <TouchableOpacity 
-                    style={styles.checkboxRow} 
-                    activeOpacity={0.8}
-                    onPress={() => setAgreeTerms(!agreeTerms)}
-                  >
-                    <View style={[styles.checkbox, agreeTerms && styles.checkboxChecked]}>
-                      {agreeTerms && <Ionicons name="checkmark" size={11} color="#ffffff" />}
-                    </View>
-                    <Text style={styles.checkboxText}>
-                      Tôi đồng ý với các <Text style={styles.hyperlinkText}>Điều khoản</Text> & <Text style={styles.hyperlinkText}>Bảo mật</Text> của WIBI.
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                
-                <View style={styles.authBottomGroup}>
-                  <TouchableOpacity style={styles.mockupButton} onPress={handleRegister}>
-                    <Text style={styles.mockupButtonText}>Create Account</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.switchScreenBtn} onPress={() => setStep(3)}>
-                    <Text style={styles.switchScreenText}>Already have an Account! <Text style={styles.switchScreenHighlight}>Login</Text></Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-
-            {/* STEP 3: LOGIN SCREEN (Mockup Layout) */}
-            {step === 3 && (
-              <View style={[styles.authContentBlock, { minHeight: remainingHeight }]}>
-                <View style={styles.authTopGroup}>
-                  <View style={styles.titleContainer}>
-                    <Text style={styles.authTitle}>Sign in</Text>
-                    <View style={styles.titleUnderline} />
-                  </View>
-                  
-                  <Text style={styles.mockupLabel}>Email</Text>
-                  <View style={[styles.mockupInputRow, focusedField === 'loginEmail' && styles.mockupInputRowActive]}>
-                    <Feather name="mail" size={16} color="#64748B" style={styles.mockupIcon} />
-                    <View style={styles.mockupDivider} />
-                    <TextInput
-                      style={styles.mockupTextInput}
-                      placeholder="demo@email.com"
-                      placeholderTextColor="#CBD5E1"
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      value={loginEmail}
-                      onChangeText={setLoginEmail}
-                      onFocus={() => setFocusedField('loginEmail')}
-                      onBlur={() => setFocusedField(null)}
-                    />
-                  </View>
-
-                  <Text style={styles.mockupLabel}>Password</Text>
-                  <View style={[styles.mockupInputRow, focusedField === 'loginPassword' && styles.mockupInputRowActive]}>
-                    <Feather name="lock" size={16} color="#64748B" style={styles.mockupIcon} />
-                    <View style={styles.mockupDivider} />
-                    <TextInput
-                      style={styles.mockupTextInput}
-                      placeholder="enter your password"
-                      placeholderTextColor="#CBD5E1"
-                      secureTextEntry={!showLoginPassword}
-                      value={loginPassword}
-                      onChangeText={setLoginPassword}
-                      onFocus={() => setFocusedField('loginPassword')}
-                      onBlur={() => setFocusedField(null)}
-                    />
-                    <TouchableOpacity onPress={() => setShowLoginPassword(!showLoginPassword)} style={styles.eyeBtn}>
-                      <Feather name={showLoginPassword ? "eye" : "eye-off"} size={16} color="#CBD5E1" />
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Remember Me and Forgot Password */}
-                  <View style={styles.authOptRow}>
-                    <TouchableOpacity 
-                      style={styles.checkboxRowMin} 
-                      activeOpacity={0.8}
-                      onPress={() => setRememberMe(!rememberMe)}
-                    >
-                      <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
-                        {rememberMe && <Ionicons name="checkmark" size={11} color="#ffffff" />}
-                      </View>
-                      <Text style={styles.authOptText}>Remember Me</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => Alert.alert('Thông báo', 'Chức năng khôi phục mật khẩu đang được phát triển.')}>
-                      <Text style={styles.forgotPwdText}>Forgot Password?</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                
-                <View style={styles.authBottomGroup}>
-                  <TouchableOpacity style={styles.mockupButton} onPress={handleLogin}>
-                    <Text style={styles.mockupButtonText}>Login</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.switchScreenBtn} onPress={() => setStep(2)}>
-                    <Text style={styles.switchScreenText}>{"Don't"} have an Account ? <Text style={styles.switchScreenHighlight}>Sign up</Text></Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1507,5 +1311,26 @@ const styles = StyleSheet.create({
   },
   eyeBtn: {
     padding: 4,
+  },
+  googleMockupButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    height: 48,
+    borderRadius: 24,
+    marginTop: 10,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+  },
+  googleMockupButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0F172A',
   },
 });
