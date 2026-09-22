@@ -38,10 +38,9 @@ export const authService = {
           
           const resData = await response.json();
           if (response.ok) {
-            await authService.sendEmailOtp(cleanEmail);
             return {
               success: true,
-              message: 'Đăng ký tài khoản thành công! Mã OTP đã được gửi đến Email của bạn.',
+              message: resData.message || 'Đăng ký thông tin thành công! Mã OTP đã được gửi đến Email của bạn.',
               requiresOtp: true
             };
           } else {
@@ -192,14 +191,16 @@ export const authService = {
 
           const resData = await response.json();
           if (response.ok) {
-            const userName = cleanEmail.split('@')[0];
+            const userName = resData.user?.username || cleanEmail.split('@')[0];
+            const userId = resData.user?.id || 'usr_' + Date.now();
+            const userRole = resData.user?.role || 'user';
             const user: UserProfile = {
-              id: 'usr_' + Date.now(),
+              id: userId,
               email: cleanEmail,
               username: userName,
               full_name: userName,
               avatar_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=0066cc&color=fff`,
-              role: 'user',
+              role: userRole as any,
             };
             return {
               success: true,
@@ -211,6 +212,9 @@ export const authService = {
           }
         } catch (nestErr: any) {
           console.warn('Không thể xác minh OTP qua NestJS backend:', nestErr?.message);
+          if (nestErr?.message && !nestErr.message.includes('fetch')) {
+            throw nestErr;
+          }
         }
       }
 
