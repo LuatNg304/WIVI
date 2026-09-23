@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, Alert, Platform } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
+import { UpgradeProModal } from './UpgradeProModal';
 
 interface UserProfileCardProps {
   onLogoutPress?: () => void;
@@ -9,6 +10,7 @@ interface UserProfileCardProps {
 
 export const UserProfileCard: React.FC<UserProfileCardProps> = ({ onLogoutPress }) => {
   const { user, isAdmin, logout } = useAuth();
+  const [upgradeModalVisible, setUpgradeModalVisible] = useState(false);
 
   if (!user) return null;
 
@@ -69,14 +71,30 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = ({ onLogoutPress 
         </TouchableOpacity>
       </View>
 
-      {isAdmin && (
+      {isAdmin ? (
         <View style={styles.adminBanner}>
           <Ionicons name="ribbon-sharp" size={16} color="#d97706" />
           <Text style={styles.adminBannerText}>
             Bạn đang đăng nhập với quyền Quản trị viên (Admin System)
           </Text>
         </View>
+      ) : (
+        <TouchableOpacity
+          style={styles.proBanner}
+          onPress={() => setUpgradeModalVisible(true)}
+        >
+          <Ionicons name="sparkles" size={16} color="#FFD700" />
+          <Text style={styles.proBannerText}>
+            Nâng cấp gói WIVI VIP - Nhận AI tư vấn & Đồng bộ Ngân hàng
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color="#FFD700" />
+        </TouchableOpacity>
       )}
+
+      <UpgradeProModal
+        visible={upgradeModalVisible}
+        onClose={() => setUpgradeModalVisible(false)}
+      />
     </View>
   );
 };
@@ -173,6 +191,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#b45309',
+    flex: 1,
+  },
+  proBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E1B2E',
+    borderWidth: 1,
+    borderColor: '#FFD700',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 12,
+    gap: 8,
+  },
+  proBannerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFD700',
     flex: 1,
   },
 });

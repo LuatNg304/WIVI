@@ -16,6 +16,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Defs, ClipPath, Rect } from 'react-native-svg';
+import { GoogleSignInButton } from '../components/GoogleSignInModal';
 
 const { width, height } = Dimensions.get('window');
 const bannerHeight = height * 0.20;
@@ -65,7 +66,7 @@ const TopographicHeader: React.FC<{ heightVal: number }> = ({ heightVal }) => {
 
 export interface RegisterScreenProps {
   onNavigateToLogin?: () => void;
-  onNavigateToOtp?: (email: string) => void;
+  onNavigateToOtp?: (email: string, username?: string, password?: string) => void;
   onRegisterSuccess?: () => void;
 }
 
@@ -74,7 +75,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
   onNavigateToOtp,
   onRegisterSuccess,
 }) => {
-  const { registerWithEmail, sendOtp, loginWithGoogle, isLoading } = useAuth();
+  const { sendOtp, isLoading } = useAuth();
 
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -82,61 +83,60 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [agreeTerms, setAgreeTerms] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
+  const notifyUser = (title: string, msg: string) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}: ${msg}`);
+    } else {
+      Alert.alert(title, msg);
+    }
+  };
+
   const handleRegister = async () => {
     if (!email.trim() || !username.trim() || !password || !confirmPassword) {
-      Alert.alert('Thông báo', 'Vui lòng điền đầy đủ các thông tin đăng ký.');
+      notifyUser('Thông báo', 'Vui lòng điền đầy đủ các thông tin đăng ký.');
       return;
     }
     if (!email.includes('@')) {
-      Alert.alert('Thông báo', 'Địa chỉ Email không hợp lệ.');
+      notifyUser('Thông báo', 'Địa chỉ Email không hợp lệ.');
       return;
     }
     if (password.length < 6) {
-      Alert.alert('Thông báo', 'Mật khẩu phải có ít nhất 6 ký tự.');
+      notifyUser('Thông báo', 'Mật khẩu phải có ít nhất 6 ký tự.');
       return;
     }
     if (password !== confirmPassword) {
-      Alert.alert('Thông báo', 'Mật khẩu xác nhận không khớp.');
-      return;
-    }
-    if (!agreeTerms) {
-      Alert.alert('Thông báo', 'Vui lòng đồng ý với Điều khoản và Chính sách bảo mật.');
+      notifyUser('Thông báo', 'Mật khẩu xác nhận không khớp.');
       return;
     }
 
     setIsSubmitting(true);
-    const res = await registerWithEmail(email, password, username);
-
-    if (res.success) {
-      await sendOtp(email);
-      setIsSubmitting(false);
-
-      if (onNavigateToOtp) {
-        onNavigateToOtp(email);
-      } else if (onNavigateToLogin) {
-        onNavigateToLogin();
+    try {
+      const res = await sendOtp(email.trim());
+      if (res && res.success === false) {
+        notifyUser('Lỗi gửi OTP', res.message || 'Không thể gửi mã OTP.');
+        setIsSubmitting(false);
+        return;
       }
-    } else {
+    } catch (e: any) {
+      console.warn('Lỗi gửi OTP:', e);
+      notifyUser('Lỗi gửi OTP', e?.message || 'Không thể gửi mã OTP.');
       setIsSubmitting(false);
-      Alert.alert('Đăng ký thất bại', res.message);
+      return;
+    } finally {
+      setIsSubmitting(false);
+    }
+
+    if (onNavigateToOtp) {
+      onNavigateToOtp(email.trim(), username.trim(), password);
     }
   };
 
-  const handleGoogleRegister = async () => {
-    setIsSubmitting(true);
-    const res = await loginWithGoogle();
-    setIsSubmitting(false);
 
-    if (res.success) {
-      if (onRegisterSuccess) onRegisterSuccess();
-    } else {
-      Alert.alert('Google Sign-Up', res.message);
-    }
-  };
+
 
   return (
     <View style={styles.rootContainer}>
@@ -262,15 +262,16 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({
               )}
             </TouchableOpacity>
 
-            {/* Google Sign Up Button */}
-            <TouchableOpacity
-              style={styles.googleMockupButton}
-              onPress={handleGoogleRegister}
+            {/* Google Sign Up Button – Real Google with OTP verification */}
+            <GoogleSignInButton
+              onSuccess={() => {
+                if (onRegisterSuccess) onRegisterSuccess();
+              }}
+              onNavigateToOtp={(email: string) => {
+                if (onNavigateToOtp) onNavigateToOtp(email);
+              }}
               disabled={isSubmitting || isLoading}
-            >
-              <Ionicons name="logo-google" size={16} color="#ea4335" style={{ marginRight: 6 }} />
-              <Text style={styles.googleMockupButtonText}>Sign up with Google</Text>
-            </TouchableOpacity>
+            />
 
             {/* Switch to Login link */}
             {onNavigateToLogin && (

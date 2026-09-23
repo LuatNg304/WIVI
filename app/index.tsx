@@ -20,9 +20,13 @@ type AuthScreenType = 'login' | 'register' | 'otp';
 function AuthNavigator() {
   const [currentScreen, setCurrentScreen] = useState<AuthScreenType>('login');
   const [targetEmail, setTargetEmail] = useState('');
+  const [targetUsername, setTargetUsername] = useState('');
+  const [targetPassword, setTargetPassword] = useState('');
 
-  const navigateToOtp = (email: string) => {
+  const navigateToOtp = (email: string, username?: string, password?: string) => {
     setTargetEmail(email);
+    setTargetUsername(username || '');
+    setTargetPassword(password || '');
     setCurrentScreen('otp');
   };
 
@@ -38,7 +42,10 @@ function AuthNavigator() {
       return (
         <OtpVerificationScreen
           email={targetEmail}
+          username={targetUsername}
+          password={targetPassword}
           onNavigateBack={() => setCurrentScreen('login')}
+          onSuccess={() => setCurrentScreen('login')}
         />
       );
     case 'login':
@@ -67,29 +74,25 @@ function MainAppContent() {
 
   // Render màn hình tương ứng tab
   const renderActiveScreen = () => {
+    const navProps = {
+      onNavigateToSettings: () => setActiveTab('jars'),
+      onNavigateToHistory: () => setActiveTab('history'),
+      onNavigateToRecord: () => setActiveTab('record'),
+    };
+
     switch (activeTab) {
       case 'home':
-        return (
-          <View style={{ flex: 1 }}>
-            <UserProfileCard />
-            <HomeScreen onNavigateToSettings={() => setActiveTab('jars')} />
-          </View>
-        );
+        return <HomeScreen {...navProps} />;
       case 'history':
-        return <HistoryScreen />;
+        return <HistoryScreen {...navProps} />;
       case 'record':
-        return <RecordScreen />;
+        return <RecordScreen {...navProps} />;
       case 'jars':
-        return (
-          <View style={{ flex: 1 }}>
-            <UserProfileCard />
-            <JarsScreen />
-          </View>
-        );
+        return <JarsScreen {...navProps} />;
       case 'discipline':
-        return <DisciplineScreen />;
+        return <DisciplineScreen {...navProps} />;
       default:
-        return <HomeScreen />;
+        return <HomeScreen {...navProps} />;
     }
   };
 

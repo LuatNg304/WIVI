@@ -10,28 +10,42 @@ import {
   FlatList,
   Alert
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFinancial, Transaction, Jar } from '../context/FinancialContext';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { AppHeader } from '../components/AppHeader';
 
-type FilterType = 'all' | 'income' | 'expense' | 'unclassified';
+type FilterType = 'all' | 'income' | 'expense' | 'pending';
 
-export const HistoryScreen: React.FC = () => {
+interface HistoryScreenProps {
+  onNavigateToSettings?: () => void;
+  onNavigateToHistory?: () => void;
+  onNavigateToRecord?: () => void;
+}
+
+export const HistoryScreen: React.FC<HistoryScreenProps> = ({
+  onNavigateToSettings,
+  onNavigateToHistory,
+  onNavigateToRecord,
+}) => {
   const {
     transactions,
     jars,
     confirmPendingTransaction,
     deletePendingTransaction,
-    recategorizeTransaction
+    recategorizeTransaction,
   } = useFinancial();
 
-  const spendJars = jars.filter(j => j.type === 'spend');
+  const spendJars = jars.filter((j) => j.type === 'spend');
 
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // Re-classify state
+
+  // Re-classify & Detail states
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [jarSelectorVisible, setJarSelectorVisible] = useState(false);
+  const [selectedDetailTx, setSelectedDetailTx] = useState<Transaction | null>(null);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
 
   // Group by date helper
   const formatDateGroupLabel = (dateStr: string) => {
@@ -52,13 +66,30 @@ export const HistoryScreen: React.FC = () => {
     }
   };
 
+  // Full format date for detailed invoice
+  const formatFullDateTime = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const days = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+    const dayName = days[d.getDay()];
+    const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${time} • ${dayName}, ${day}/${month}/${year}`;
+  };
+
   // Filter transactions
-  const filteredTxs = transactions.filter(t => {
+  const filteredTxs = transactions.filter((t) => {
     // 1. Filter by category tabs
-    if (activeFilter === 'income' && (t.type !== 'income' || t.isTransfer)) return false;
-    if (activeFilter === 'expense' && (t.type !== 'expense' || t.isPending || t.isTransfer)) return false;
-    if (activeFilter === 'unclassified' && (jars.some(j => j.id === t.jarId) && t.jarId !== 'unknown')) return false;
-    
+    if (activeFilter === 'income' && (t.type !== 'income' || t.isTransfer))
+      return false;
+    if (
+      activeFilter === 'expense' &&
+      (t.type !== 'expense' || t.isPending || t.isTransfer)
+    )
+      return false;
+    if (activeFilter === 'pending' && !t.isPending) return false;
+
     // 2. Filter by search description
     if (searchQuery.trim() !== '') {
       return t.description.toLowerCase().includes(searchQuery.toLowerCase());
@@ -85,9 +116,24 @@ export const HistoryScreen: React.FC = () => {
     };
   };
 
+  const handleOpenTxDetail = (tx: Transaction) => {
+    setSelectedDetailTx(tx);
+    setDetailModalVisible(true);
+  };
+
   const handleOpenReclassify = (tx: Transaction) => {
     setSelectedTx(tx);
     setJarSelectorVisible(true);
+  };
+
+  const handleReclassifyFromDetail = () => {
+    if (selectedDetailTx) {
+      const tx = selectedDetailTx;
+      setDetailModalVisible(false);
+      setTimeout(() => {
+        handleOpenReclassify(tx);
+      }, 200);
+    }
   };
 
   const handleReclassifyConfirm = (jarId: string) => {
@@ -102,19 +148,45 @@ export const HistoryScreen: React.FC = () => {
     }
   };
 
+  const handleConfirmFromDetail = () => {
+    if (selectedDetailTx) {
+      const jarId = selectedDetailTx.suggestedJarId || selectedDetailTx.jarId || '1';
+      confirmPendingTransaction(selectedDetailTx.id, jarId);
+      setDetailModalVisible(false);
+      setSelectedDetailTx(null);
+    }
+  };
+
   const handleIgnorePending = (id: string) => {
     Alert.alert(
       'Xóa giao dịch',
       'Bạn có chắc chắn muốn bỏ qua giao dịch chờ duyệt này?',
       [
         { text: 'Hủy', style: 'cancel' },
-        { text: 'Xóa', style: 'destructive', onPress: () => deletePendingTransaction(id) }
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: () => {
+            deletePendingTransaction(id);
+            if (selectedDetailTx?.id === id) {
+              setDetailModalVisible(false);
+              setSelectedDetailTx(null);
+            }
+          }
+        }
       ]
     );
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* 1. TOP UNIFIED HEADER */}
+      <AppHeader
+        onNavigateToSettings={onNavigateToSettings}
+        onNavigateToHistory={onNavigateToHistory}
+        onNavigateToRecord={onNavigateToRecord}
+      />
+
       <Text style={styles.screenTitle}>Lịch sử Giao dịch</Text>
 
       {/* SEARCH BAR */}
@@ -122,7 +194,7 @@ export const HistoryScreen: React.FC = () => {
         <Feather name="search" size={16} color="#7a7a7a" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Tìm kiếm giao dịch..."
+          placeholder="Tìm kiếm giao dịch, hóa đơn..."
           placeholderTextColor="#7a7a7a"
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -136,35 +208,44 @@ export const HistoryScreen: React.FC = () => {
 
       {/* FILTER TABS */}
       <View style={styles.filterRow}>
-        {(['all', 'income', 'expense', 'unclassified'] as FilterType[]).map((filter) => {
-          const label = 
-            filter === 'all' ? 'Tất cả' :
-            filter === 'income' ? 'Thu nhập' :
-            filter === 'expense' ? 'Chi tiêu' : 'Cần phân loại';
-          
-          const count = filter === 'unclassified' ? transactions.filter(t => !jars.some(j => j.id === t.jarId) || t.jarId === 'unknown').length : 0;
+        {(['all', 'income', 'expense', 'pending'] as FilterType[]).map(
+          (filter) => {
+            const label =
+              filter === 'all'
+                ? 'Tất cả'
+                : filter === 'income'
+                  ? 'Thu nhập'
+                  : filter === 'expense'
+                    ? 'Chi tiêu'
+                    : 'Chờ duyệt';
 
-          return (
-            <TouchableOpacity
-              key={filter}
-              style={[
-                styles.filterTab,
-                activeFilter === filter && styles.activeFilterTab
-              ]}
-              onPress={() => setActiveFilter(filter)}
-            >
-              <Text
+            const count =
+              filter === 'pending'
+                ? transactions.filter((t) => t.isPending).length
+                : 0;
+
+            return (
+              <TouchableOpacity
+                key={filter}
                 style={[
-                  styles.filterTabText,
-                  activeFilter === filter && styles.activeFilterTabText
+                  styles.filterTab,
+                  activeFilter === filter && styles.activeFilterTab,
                 ]}
+                onPress={() => setActiveFilter(filter)}
               >
-                {label}
-                {count > 0 && ` (${count})`}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+                <Text
+                  style={[
+                    styles.filterTabText,
+                    activeFilter === filter && styles.activeFilterTabText,
+                  ]}
+                >
+                  {label}
+                  {count > 0 && ` (${count})`}
+                </Text>
+              </TouchableOpacity>
+            );
+          },
+        )}
       </View>
 
       {/* TRANSACTIONS LIST */}
@@ -179,11 +260,16 @@ export const HistoryScreen: React.FC = () => {
             {transactions.filter(t => t.isPending).map(tx => {
               const suggestedJar = getJarInfo(tx.suggestedJarId || '1');
               return (
-                <View key={tx.id} style={styles.pendingCard}>
+                <TouchableOpacity
+                  key={tx.id}
+                  style={styles.pendingCard}
+                  activeOpacity={0.8}
+                  onPress={() => handleOpenTxDetail(tx)}
+                >
                   <View style={styles.pendingCardHeader}>
                     <Text style={styles.pendingDesc}>{tx.description}</Text>
                     <Text style={styles.pendingAmount}>
-                      -{tx.amount.toLocaleString('vi-VN')} VND
+                      -{tx.amount.toLocaleString('vi-VN')} đ
                     </Text>
                   </View>
                   <Text style={styles.pendingAIProposal}>
@@ -192,24 +278,33 @@ export const HistoryScreen: React.FC = () => {
                   <View style={styles.pendingActions}>
                     <TouchableOpacity
                       style={styles.actionIgnoreBtn}
-                      onPress={() => handleIgnorePending(tx.id)}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleIgnorePending(tx.id);
+                      }}
                     >
                       <Text style={styles.actionIgnoreText}>Bỏ qua</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.actionEditBtn}
-                      onPress={() => handleOpenReclassify(tx)}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleOpenReclassify(tx);
+                      }}
                     >
                       <Text style={styles.actionEditText}>Sửa hũ</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.actionConfirmBtn}
-                      onPress={() => confirmPendingTransaction(tx.id, tx.suggestedJarId || '1')}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        confirmPendingTransaction(tx.id, tx.suggestedJarId || '1');
+                      }}
                     >
                       <Text style={styles.actionConfirmText}>Xác nhận</Text>
                     </TouchableOpacity>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -237,7 +332,7 @@ export const HistoryScreen: React.FC = () => {
                         index < groups[groupName].length - 1 && styles.txBorder,
                         tx.isPending && styles.txItemPending
                       ]}
-                      onPress={() => handleOpenReclassify(tx)}
+                      onPress={() => handleOpenTxDetail(tx)}
                       activeOpacity={0.7}
                     >
                       <View style={styles.txLeft}>
@@ -264,7 +359,7 @@ export const HistoryScreen: React.FC = () => {
                             styles.txAmount,
                             isIncome ? styles.incomeAmount : styles.expenseAmount
                           ]}>
-                            {isIncome ? '+' : '-'}{tx.amount.toLocaleString('vi-VN')}
+                            {isIncome ? '+' : '-'}{tx.amount.toLocaleString('vi-VN')} đ
                           </Text>
                           <Feather name="chevron-right" size={14} color="#cccccc" />
                         </View>
@@ -285,6 +380,202 @@ export const HistoryScreen: React.FC = () => {
         {/* Space at bottom for floating nav */}
         <View style={{ height: 90 }} />
       </ScrollView>
+
+      {/* DETAILED INVOICE / RECEIPT MODAL */}
+      <Modal visible={detailModalVisible} animationType="slide" transparent>
+        <View style={styles.modalBg}>
+          <View style={styles.receiptModalContent}>
+            {/* Header bar */}
+            <View style={styles.receiptModalHeader}>
+              <View style={styles.receiptIconBadge}>
+                <Ionicons name="receipt-outline" size={20} color="#2563EB" />
+              </View>
+              <Text style={styles.receiptHeaderTitle}>Chi Tiết Hóa Đơn</Text>
+              <TouchableOpacity
+                style={styles.receiptCloseBtn}
+                onPress={() => setDetailModalVisible(false)}
+              >
+                <Feather name="x" size={20} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            {selectedDetailTx && (() => {
+              const tx = selectedDetailTx;
+              const jar = getJarInfo(tx.jarId || tx.suggestedJarId || '1');
+              const isIncome = tx.type === 'income';
+              const isPending = !!tx.isPending;
+              const isTransfer = !!tx.isTransfer;
+
+              return (
+                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.receiptBody}>
+                  {/* Amount Ticket Card */}
+                  <View style={styles.receiptAmountCard}>
+                    <Text style={styles.receiptAmountLabel}>
+                      {isIncome ? 'SỐ TIỀN THU NHẬP' : isTransfer ? 'SỐ TIỀN CHUYỂN KHOẢN' : 'SỐ TIỀN THANH TOÁN'}
+                    </Text>
+                    <Text style={[
+                      styles.receiptAmountValue,
+                      isIncome ? styles.incomeAmountValue : styles.expenseAmountValue
+                    ]}>
+                      {isIncome ? '+' : '-'}{tx.amount.toLocaleString('vi-VN')} đ
+                    </Text>
+
+                    <View style={[
+                      styles.receiptStatusBadge,
+                      isPending ? styles.statusBadgePending : isIncome ? styles.statusBadgeIncome : styles.statusBadgeSuccess
+                    ]}>
+                      <Ionicons
+                        name={isPending ? "time-outline" : isIncome ? "arrow-down-circle-outline" : "checkmark-circle-outline"}
+                        size={13}
+                        color={isPending ? '#D97706' : isIncome ? '#16A34A' : '#2563EB'}
+                        style={{ marginRight: 4 }}
+                      />
+                      <Text style={[
+                        styles.receiptStatusText,
+                        isPending ? { color: '#D97706' } : isIncome ? { color: '#16A34A' } : { color: '#2563EB' }
+                      ]}>
+                        {isPending ? 'Đang chờ duyệt' : isIncome ? 'Ghi nhận thu nhập' : 'Thanh toán thành công'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Receipt Meta Rows */}
+                  <View style={styles.receiptInfoCard}>
+                    {/* Row: Transaction Name */}
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptRowLabel}>Nội dung / Tên</Text>
+                      <Text style={styles.receiptRowValueBold} numberOfLines={2}>
+                        {tx.description}
+                      </Text>
+                    </View>
+
+                    <View style={styles.receiptDivider} />
+
+                    {/* Row: Transaction ID */}
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptRowLabel}>Mã hóa đơn</Text>
+                      <View style={styles.idContainer}>
+                        <Text style={styles.receiptCodeText}>
+                          #WIVI-{tx.id ? tx.id.substring(0, 8).toUpperCase() : 'TX'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.receiptDivider} />
+
+                    {/* Row: Date Time */}
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptRowLabel}>Thời gian</Text>
+                      <Text style={styles.receiptRowValue}>
+                        {formatFullDateTime(tx.date)}
+                      </Text>
+                    </View>
+
+                    <View style={styles.receiptDivider} />
+
+                    {/* Row: Jar Category */}
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptRowLabel}>Hũ ngân sách</Text>
+                      <View style={styles.jarBadgeDetail}>
+                        <View style={[styles.jarColorDot, { backgroundColor: jar.color }]} />
+                        <Text style={styles.jarDetailName}>{jar.name}</Text>
+                        {jar.allocationPercent > 0 && (
+                          <Text style={styles.jarDetailPercent}>({jar.allocationPercent}%)</Text>
+                        )}
+                      </View>
+                    </View>
+
+                    <View style={styles.receiptDivider} />
+
+                    {/* Row: Payment Method */}
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptRowLabel}>Phương thức</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Ionicons
+                          name={tx.source === 'cash' ? 'cash-outline' : 'card-outline'}
+                          size={15}
+                          color="#475569"
+                        />
+                        <Text style={styles.receiptRowValue}>
+                          {tx.source === 'cash' ? 'Tiền mặt' : 'Tài khoản Ngân hàng (SePay)'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.receiptDivider} />
+
+                    {/* Row: Source / Recognition */}
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptRowLabel}>Nguồn ghi nhận</Text>
+                      {tx.confidence ? (
+                        <View style={styles.aiTagBadge}>
+                          <Ionicons name="sparkles" size={12} color="#2563EB" />
+                          <Text style={styles.aiTagText}>
+                            Quét AI OCR ({Math.round(tx.confidence * 100)}%)
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text style={styles.receiptRowValue}>Nhập thủ công</Text>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Actions inside Detail Receipt */}
+                  <View style={styles.receiptActionsContainer}>
+                    {isPending ? (
+                      <View style={{ gap: 10, width: '100%' }}>
+                        <TouchableOpacity
+                          style={styles.receiptPrimaryBtn}
+                          onPress={handleConfirmFromDetail}
+                        >
+                          <Ionicons name="checkmark-circle" size={18} color="#ffffff" style={{ marginRight: 6 }} />
+                          <Text style={styles.receiptPrimaryBtnText}>Xác nhận & Lưu vào {jar.name}</Text>
+                        </TouchableOpacity>
+
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                          <TouchableOpacity
+                            style={[styles.receiptSecondaryBtn, { flex: 1 }]}
+                            onPress={handleReclassifyFromDetail}
+                          >
+                            <Feather name="refresh-cw" size={15} color="#0F172A" style={{ marginRight: 6 }} />
+                            <Text style={styles.receiptSecondaryBtnText}>Chọn hũ khác</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={[styles.receiptDangerBtn, { flex: 1 }]}
+                            onPress={() => handleIgnorePending(tx.id)}
+                          >
+                            <Feather name="trash-2" size={15} color="#EF4444" style={{ marginRight: 6 }} />
+                            <Text style={styles.receiptDangerBtnText}>Xóa bỏ</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={{ gap: 10, width: '100%' }}>
+                        {!isIncome && !isTransfer && (
+                          <TouchableOpacity
+                            style={styles.receiptSecondaryBtn}
+                            onPress={handleReclassifyFromDetail}
+                          >
+                            <Feather name="refresh-cw" size={16} color="#0F172A" style={{ marginRight: 6 }} />
+                            <Text style={styles.receiptSecondaryBtnText}>Đổi hũ ngân sách</Text>
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                          style={styles.receiptPrimaryBtn}
+                          onPress={() => setDetailModalVisible(false)}
+                        >
+                          <Text style={styles.receiptPrimaryBtnText}>Đóng</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                </ScrollView>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
 
       {/* JAR SELECTOR SHEET (MODAL) */}
       <Modal visible={jarSelectorVisible} animationType="slide" transparent>
@@ -317,24 +608,23 @@ export const HistoryScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC', // Crisp slate off-white
-    paddingTop: 60,
+    backgroundColor: '#F8FAFC',
   },
   screenTitle: {
-    fontSize: 28,
-    fontFamily: 'SF Pro Display, system-ui, -apple-system, sans-serif',
+    fontSize: 22,
     fontWeight: '800',
-    color: '#0F172A', // Slate 900
+    color: '#0F172A',
     paddingHorizontal: 20,
-    marginBottom: 16,
-    letterSpacing: -0.6,
+    marginTop: 4,
+    marginBottom: 14,
+    letterSpacing: -0.4,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -642,5 +932,240 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#7a7a7a',
     marginTop: 2,
+  },
+  // Detailed Receipt Modal Styles
+  receiptModalContent: {
+    backgroundColor: '#F8FAFC',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 36,
+    maxHeight: '85%',
+  },
+  receiptModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  receiptIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  receiptHeaderTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.3,
+  },
+  receiptCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  receiptBody: {
+    paddingVertical: 18,
+    gap: 16,
+  },
+  receiptAmountCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  receiptAmountLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+  receiptAmountValue: {
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+    marginBottom: 10,
+  },
+  incomeAmountValue: {
+    color: '#16A34A',
+  },
+  expenseAmountValue: {
+    color: '#0F172A',
+  },
+  receiptStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusBadgePending: {
+    backgroundColor: '#FEF3C7',
+  },
+  statusBadgeIncome: {
+    backgroundColor: '#DCFCE7',
+  },
+  statusBadgeSuccess: {
+    backgroundColor: '#EFF6FF',
+  },
+  receiptStatusText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  receiptInfoCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  receiptRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  receiptRowLabel: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
+    flex: 0.9,
+  },
+  receiptRowValue: {
+    fontSize: 13,
+    color: '#0F172A',
+    fontWeight: '600',
+    textAlign: 'right',
+    flex: 1.1,
+  },
+  receiptRowValueBold: {
+    fontSize: 14,
+    color: '#0F172A',
+    fontWeight: '700',
+    textAlign: 'right',
+    flex: 1.1,
+  },
+  receiptDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+  },
+  idContainer: {
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  receiptCodeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+    fontFamily: 'monospace',
+  },
+  jarBadgeDetail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  jarColorDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  jarDetailName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  jarDetailPercent: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  aiTagBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    gap: 4,
+  },
+  aiTagText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2563EB',
+  },
+  receiptActionsContainer: {
+    marginTop: 6,
+    alignItems: 'center',
+  },
+  receiptPrimaryBtn: {
+    backgroundColor: '#0F172A',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 16,
+    width: '100%',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  receiptPrimaryBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  receiptSecondaryBtn: {
+    backgroundColor: '#ffffff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  receiptSecondaryBtnText: {
+    color: '#0F172A',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  receiptDangerBtn: {
+    backgroundColor: '#FEF2F2',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+  },
+  receiptDangerBtnText: {
+    color: '#EF4444',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

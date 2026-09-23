@@ -1,16 +1,19 @@
 {
   "expo": {
-    "name": "StickerSmash",
-    "slug": "StickerSmash",
+    "name": "WIVI",
+    "slug": "wivi",
+    "owner": "chienqwe",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "stickersmash",
+    "scheme": "wivi",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.wivi.app"
     },
     "android": {
+      "package": "com.wivi.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -40,7 +43,20 @@
       "expo-font",
       "expo-image",
       "expo-status-bar",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Ứng dụng cần quyền truy cập thư viện ảnh để tải lên và quét hóa đơn.",
+          "cameraPermission": "Ứng dụng cần quyền truy cập Camera để chụp và quét hóa đơn trực tiếp."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Ứng dụng cần quyền truy cập Camera để chụp và quét hóa đơn trực tiếp trong ứng dụng."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

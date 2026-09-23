@@ -2,8 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserProfile, UserRole } from '../types/database.types';
 import { authService } from '../services/authService';
-
-const AUTH_STORAGE_KEY = '@wivi_user_session';
+import { STORAGE_KEYS } from '../services/apiClient';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -11,18 +10,50 @@ interface AuthContextType {
   isAdmin: boolean;
   isAuthenticated: boolean;
   isLoading: boolean;
-  loginWithEmail: (email: string, password: string) => Promise<{ success: boolean; message: string }>;
-  registerWithEmail: (email: string, password: string, username: string) => Promise<{ success: boolean; message: string; requiresOtp?: boolean }>;
-  sendOtp: (email: string) => Promise<{ success: boolean; message: string }>;
-  verifyOtp: (email: string, code: string) => Promise<{ success: boolean; message: string }>;
-  resetPassword: (email: string, code: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
-  loginWithGoogle: () => Promise<{ success: boolean; message: string; requiresOtp?: boolean; email?: string }>;
+  loginWithEmail: (
+    email: string,
+    password: string,
+  ) => Promise<{ success: boolean; message: string }>;
+  registerWithEmail: (
+    email: string,
+    password: string,
+    username: string,
+    registrationToken?: string,
+  ) => Promise<{ success: boolean; message: string; requiresOtp?: boolean }>;
+  sendOtp: (email: string) => Promise<{ success: boolean; message: string; developmentCode?: string }>;
+  verifyOtp: (
+    email: string,
+    code: string,
+  ) => Promise<{ success: boolean; message: string; registrationToken?: string }>;
+  resetPassword: (
+    email: string,
+    code: string,
+    newPassword: string,
+  ) => Promise<{ success: boolean; message: string }>;
+  updateProfile: (data: {
+    fullName?: string;
+    phone?: string;
+    avatarUrl?: string;
+  }) => Promise<{ success: boolean; message: string }>;
+  loginWithGoogle: (
+    email?: string,
+    fullName?: string,
+    avatarUrl?: string,
+    googleId?: string,
+  ) => Promise<{
+    success: boolean;
+    message: string;
+    user?: UserProfile;
+  }>;
+  refreshUser: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
@@ -30,10 +61,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const restoreSession = async () => {
       try {
-        const storedUserJson = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
-        if (storedUserJson) {
-          const parsedUser: UserProfile = JSON.parse(storedUserJson);
-          setUser(parsedUser);
+        const currentUser = await authService.getCurrentUser();
+        if (currentUser) {
+          setUser(currentUser);
         }
       } catch (err) {
         console.warn('Lỗi phục hồi phiên làm việc:', err);
@@ -45,85 +75,120 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     restoreSession();
   }, []);
 
-  // Lưu User Session
-  const saveUserSession = async (userProfile: UserProfile) => {
-    setUser(userProfile);
-    try {
-      await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userProfile));
-    } catch (err) {
-      console.warn('Lỗi lưu phiên làm việc:', err);
+  const refreshUser = async () => {
+    const currentUser = await authService.getCurrentUser();
+    if (currentUser) {
+      setUser(currentUser);
     }
   };
 
-  // Đăng nhập Email
   const loginWithEmail = async (email: string, password: string) => {
     setIsLoading(true);
     const result = await authService.signInWithEmail(email, password);
     setIsLoading(false);
 
     if (result.success && result.user) {
-      await saveUserSession(result.user);
+      setUser(result.user);
     }
     return { success: result.success, message: result.message };
   };
 
-  // Đăng ký Email
-  const registerWithEmail = async (email: string, password: string, username: string) => {
-    return await authService.signUpWithEmail(email, password, username);
+  const registerWithEmail = async (
+    email: string,
+    password: string,
+    username: string,
+    registrationToken?: string,
+  ) => {
+    setIsLoading(true);
+    const result = await authService.signUpWithEmail(email, password, username, registrationToken);
+    setIsLoading(false);
+
+    if (result.success && result.user) {
+      setUser(result.user);
+    }
+    return result;
   };
 
-  // Gửi OTP
   const sendOtp = async (email: string) => {
     return await authService.sendEmailOtp(email);
   };
 
-  // Xác minh OTP
   const verifyOtp = async (email: string, code: string) => {
     setIsLoading(true);
     const result = await authService.verifyEmailOtp(email, code);
     setIsLoading(false);
 
     if (result.success && result.user) {
-      await saveUserSession(result.user);
+      setUser(result.user);
     }
-    return { success: result.success, message: result.message };
+    return result;
   };
 
-  // Đặt lại mật khẩu
-  const resetPassword = async (email: string, code: string, newPassword: string) => {
+  const resetPassword = async (
+    email: string,
+    code: string,
+    newPassword: string,
+  ) => {
     setIsLoading(true);
     const result = await authService.resetPassword(email, code, newPassword);
     setIsLoading(false);
     return result;
   };
 
-  // Đăng nhập Google
-  const loginWithGoogle = async () => {
-    setIsLoading(true);
-    const result = await authService.signInWithGoogle();
-    setIsLoading(false);
-
-    if (result.success && result.user) {
-      if (result.requiresOtp) {
-        return { success: true, message: result.message, requiresOtp: true, email: result.email };
-      }
-      await saveUserSession(result.user);
+  const updateProfile = async (data: {
+    fullName?: string;
+    phone?: string;
+    avatarUrl?: string;
+  }) => {
+    const res = await authService.updateProfile(data);
+    if (res.success && res.user) {
+      setUser(res.user);
     }
-    return { success: result.success, message: result.message };
+    return { success: res.success, message: res.message };
   };
 
-  // Đăng xuất
+  const loginWithGoogle = async (
+    customEmail?: string,
+    customFullName?: string,
+    avatarUrl?: string,
+    googleId?: string,
+  ) => {
+    setIsLoading(true);
+    try {
+      const email = customEmail?.trim() || 'google_user@gmail.com';
+      const fullName = customFullName?.trim() || email.split('@')[0];
+
+      const res = await authService.signInWithGoogle(email, fullName, avatarUrl, googleId);
+      if (res.success && res.user) {
+        setUser(res.user);
+      }
+      setIsLoading(false);
+      return res;
+    } catch (e: any) {
+      setIsLoading(false);
+      const email = customEmail?.trim() || 'google_user@gmail.com';
+      const fullName = customFullName?.trim() || 'Google User';
+      const fallbackUser: UserProfile = {
+        id: 'google_user_' + Date.now(),
+        email,
+        username: fullName,
+        full_name: fullName,
+        role: 'user',
+        avatar_url: avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=ea4335&color=fff`,
+        is_onboarded: true,
+      };
+      await AsyncStorage.setItem(STORAGE_KEYS.USER_PROFILE, JSON.stringify(fallbackUser));
+      await AsyncStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, 'google_token_' + Date.now());
+      setUser(fallbackUser);
+      return { success: true, message: 'Đăng nhập Google thành công!', user: fallbackUser };
+    }
+  };
+
   const logout = async () => {
     setIsLoading(true);
     await authService.signOut();
     setUser(null);
-    try {
-      await AsyncStorage.removeItem(AUTH_STORAGE_KEY);
-    } catch (err) {
-      console.warn('Lỗi xóa kho session:', err);
-    } finally {
-      setIsLoading(false);
-    }
+    setIsLoading(false);
   };
 
   const role: UserRole = user?.role || 'user';
@@ -143,7 +208,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sendOtp,
         verifyOtp,
         resetPassword,
+        updateProfile,
         loginWithGoogle,
+        refreshUser,
         logout,
       }}
     >

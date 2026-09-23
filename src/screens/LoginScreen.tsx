@@ -16,6 +16,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import Svg, { Path, Defs, ClipPath, Rect } from 'react-native-svg';
+import { GoogleSignInButton } from '../components/GoogleSignInModal';
 
 const { width, height } = Dimensions.get('window');
 const bannerHeight = height * 0.20;
@@ -83,7 +84,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   onNavigateToOtp,
   onLoginSuccess,
 }) => {
-  const { loginWithEmail, loginWithGoogle, isLoading } = useAuth();
+  const { loginWithEmail, isLoading } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -92,13 +93,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
+  const notifyUser = (title: string, msg: string) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}: ${msg}`);
+    } else {
+      Alert.alert(title, msg);
+    }
+  };
+
   const handleLogin = async () => {
     if (!email.trim()) {
-      Alert.alert('Thông báo', 'Vui lòng nhập địa chỉ Email.');
+      notifyUser('Thông báo', 'Vui lòng nhập địa chỉ Email.');
       return;
     }
     if (!password.trim()) {
-      Alert.alert('Thông báo', 'Vui lòng nhập mật khẩu.');
+      notifyUser('Thông báo', 'Vui lòng nhập mật khẩu.');
       return;
     }
 
@@ -109,25 +118,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     if (res.success) {
       if (onLoginSuccess) onLoginSuccess();
     } else {
-      Alert.alert('Lỗi đăng nhập', res.message || 'Email hoặc mật khẩu không chính xác.');
+      notifyUser('Lỗi đăng nhập', res.message || 'Email hoặc mật khẩu không chính xác.');
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setIsSubmitting(true);
-    const res = await loginWithGoogle();
-    setIsSubmitting(false);
 
-    if (res.success) {
-      if (res.requiresOtp && res.email) {
-        if (onNavigateToOtp) onNavigateToOtp(res.email);
-      } else if (onLoginSuccess) {
-        onLoginSuccess();
-      }
-    } else {
-      Alert.alert('Google Sign-In', res.message);
-    }
-  };
 
   return (
     <View style={styles.rootContainer}>
@@ -219,15 +214,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               )}
             </TouchableOpacity>
 
-            {/* Google Sign In Button */}
-            <TouchableOpacity
-              style={styles.googleMockupButton}
-              onPress={handleGoogleLogin}
+            {/* Google Sign In Button – Real Google with OTP verification */}
+            <GoogleSignInButton
+              onSuccess={() => {
+                if (onLoginSuccess) onLoginSuccess();
+              }}
+              onNavigateToOtp={(email: string) => {
+                if (onNavigateToOtp) onNavigateToOtp(email);
+              }}
               disabled={isSubmitting || isLoading}
-            >
-              <Ionicons name="logo-google" size={18} color="#ea4335" style={{ marginRight: 8 }} />
-              <Text style={styles.googleMockupButtonText}>Sign in with Google</Text>
-            </TouchableOpacity>
+            />
 
             {/* Switch to Register link */}
             {onNavigateToRegister && (
@@ -240,6 +236,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+
     </View>
   );
 };
